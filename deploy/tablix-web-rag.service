@@ -1,0 +1,26 @@
+[Unit]
+Description=Tablix Web RAG research API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/tablix-web-rag
+EnvironmentFile=-/opt/tablix-web-rag/.env
+Environment=HOST=0.0.0.0
+Environment=PORT=8000
+Environment=WORKERS=2
+ExecStart=/opt/tablix-web-rag/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips=*
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tablix-web-rag
+
+[Install]
+WantedBy=multi-user.target

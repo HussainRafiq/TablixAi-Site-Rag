@@ -1,0 +1,37 @@
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.config import Settings, get_settings
+from app.models import HealthResponse, ResearchRequest, ResearchResponse
+from app.services.research import run_research
+
+router = APIRouter()
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        openrouter_configured=bool(settings.openrouter_api_key.strip()),
+        model=settings.openrouter_model,
+    )
+
+
+@router.post("/research", response_model=ResearchResponse)
+async def research(
+    body: ResearchRequest,
+    settings: Settings = Depends(get_settings),
+) -> ResearchResponse:
+    if not body.query.strip():
+        raise HTTPException(status_code=400, detail="query is required")
+
+    if body.synthesize and not settings.openrouter_api_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "OPENROUTER_API_KEY is missing. Add it to .env "
+                "(https://openrouter.ai/keys), or set synthesize=false "
+                "to return retrieved sources only."
+            ),
+        )
+
+    return await run_research(body, settings)
