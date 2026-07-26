@@ -12,7 +12,7 @@ services:
       PORT: "8000"
       WORKERS: "${WORKERS:-2}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openai/gpt-4o-mini}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openrouter/free}"
       OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]

@@ -34,7 +34,7 @@ Required only when `"synthesize": true` (default).
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_MODEL=openrouter/free
 HOST=0.0.0.0
 PORT=8000
 WORKERS=2

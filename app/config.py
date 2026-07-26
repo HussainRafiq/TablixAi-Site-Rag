@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     openrouter_api_key: str = ""
-    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_model: str = "openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     host: str = "0.0.0.0"
     port: int = 8000
