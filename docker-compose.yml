@@ -10,7 +10,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "8000"
-      WORKERS: "${WORKERS:-2}"
+      WORKERS: "${WORKERS:-1}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openrouter/free}"
       OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"

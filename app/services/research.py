@@ -49,8 +49,17 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
     # Cap pages
     candidate_urls = candidate_urls[: max(max_pages, len(direct_urls))]
 
-    pages = await fetch_pages(candidate_urls, settings) if candidate_urls else []
+    pages = (
+        await fetch_pages(candidate_urls, settings, concurrency=2)
+        if candidate_urls
+        else []
+    )
     ok_pages = [p for p in pages if p.status == "ok" and p.content]
+    failed_pages = [
+        {"url": p.url, "status": p.status, "error": p.error}
+        for p in pages
+        if p.status != "ok"
+    ]
 
     sources = retrieve(req.query, ok_pages, top_k=min(8, max(4, max_pages)))
 
@@ -61,6 +70,7 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
         "search_hit_count": len(search_hits),
         "pages_fetched": len(pages),
         "pages_ok": len(ok_pages),
+        "page_errors": failed_pages[:10],
         "domains": domains,
         "direct_urls": direct_urls,
         "model": settings.openrouter_model if req.synthesize else None,
@@ -68,9 +78,14 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
 
     if req.synthesize:
         if not sources:
+            detail = ""
+            if failed_pages:
+                first = failed_pages[0]
+                detail = f" First failure: {first.get('status')} {first.get('error')}"
             answer = (
                 "No usable content was retrieved from the allowed sites. "
                 "Try broader domains, different URLs, or enable web search."
+                + detail
             )
         else:
             context = format_context(sources)

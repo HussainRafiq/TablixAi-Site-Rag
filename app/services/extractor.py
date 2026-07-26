@@ -104,7 +104,7 @@ async def fetch_page(
             )
         return PageDocument(url=str(resp.url), title=title, content=text, status="ok")
     except Exception as exc:  # noqa: BLE001
-        logger.info("Fetch failed for %s: %s", url, exc)
+        logger.warning("Fetch failed for %s: %s", url, exc)
         return PageDocument(
             url=url,
             title="",
@@ -117,6 +117,8 @@ async def fetch_page(
 async def fetch_pages(
     urls: list[str],
     settings: Settings,
+    *,
+    concurrency: int = 2,
 ) -> list[PageDocument]:
     # de-dupe while preserving order
     seen: set[str] = set()
@@ -132,6 +134,12 @@ async def fetch_pages(
         "Accept-Language": "en-US,en;q=0.9",
     }
 
+    sem = asyncio.Semaphore(max(1, concurrency))
+
     async with httpx.AsyncClient(headers=headers, http2=False) as client:
-        tasks = [fetch_page(client, url, settings) for url in unique]
-        return await asyncio.gather(*tasks)
+
+        async def _one(url: str) -> PageDocument:
+            async with sem:
+                return await fetch_page(client, url, settings)
+
+        return list(await asyncio.gather(*[_one(url) for url in unique]))

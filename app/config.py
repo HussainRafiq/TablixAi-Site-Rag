@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     host: str = "0.0.0.0"
     port: int = 8000
-    workers: int = 2
-    max_pages: int = 8
-    max_chars_per_page: int = 12000
+    workers: int = 1
+    max_pages: int = 6
+    max_chars_per_page: int = 8000
     request_timeout: float = 25.0
     user_agent: str = (
         "Mozilla/5.0 (compatible; TablixWebRAG/1.0; +https://tablix.ai) "

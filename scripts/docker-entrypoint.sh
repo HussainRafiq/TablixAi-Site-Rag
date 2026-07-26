@@ -3,7 +3,8 @@ set -eu
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
-WORKERS="${WORKERS:-2}"
+# Single worker by default — small EC2 instances OOM with multiple uvicorn workers.
+WORKERS="${WORKERS:-1}"
 
 exec python -m uvicorn app.main:app \
   --host "$HOST" \
