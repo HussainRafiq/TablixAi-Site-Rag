@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     workers: int = 1
     max_pages: int = 6
     max_chars_per_page: int = 8000
-    request_timeout: float = 25.0
+    request_timeout: float = 20.0
     user_agent: str = (
-        "Mozilla/5.0 (compatible; TablixWebRAG/1.0; +https://tablix.ai) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
 
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 
 from app.config import Settings
-from app.models import Citation, ResearchRequest, ResearchResponse
+from app.models import Citation, PageDocument, ResearchRequest, ResearchResponse
 from app.services.extractor import fetch_pages
 from app.services.openrouter import OpenRouterError, chat_completion
 from app.services.rag import format_context, retrieve
-from app.services.search import search_web, split_sites, url_allowed
+from app.services.search import SearchHit, search_web, split_sites, url_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +20,41 @@ If the sources are insufficient, say what is missing instead of inventing facts.
 Be concise, structured, and specific."""
 
 
+def _snippet_pages(hits: list[SearchHit]) -> list[PageDocument]:
+    """Use search snippets when full-page fetch fails (common under CF / OOM)."""
+    pages: list[PageDocument] = []
+    for hit in hits:
+        text = " ".join(x for x in [hit.title, hit.snippet] if x).strip()
+        if len(text) < 40:
+            continue
+        pages.append(
+            PageDocument(
+                url=hit.url,
+                title=hit.title or hit.url,
+                content=text,
+                status="ok",
+                error="snippet_fallback",
+            )
+        )
+    return pages
+
+
 async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResponse:
     direct_urls, domains = split_sites(req.sites)
     max_pages = min(req.max_results, settings.max_pages)
 
     candidate_urls: list[str] = list(direct_urls)
-    search_hits = []
+    # Seed domain roots so site-restricted research has a reliable page even if
+    # search result URLs fail (Cloudflare, timeouts, etc.).
+    for domain in domains:
+        candidate_urls.append(f"https://{domain}/")
+        candidate_urls.append(f"https://www.{domain}/")
+
+    search_hits: list[SearchHit] = []
 
     if req.search_web:
-        # If only full URLs were given and no domains, still allow open web unless
-        # sites were provided as a hard allowlist of URLs-only.
         do_search = True
         if req.sites and not domains and direct_urls:
-            # User gave only specific endpoints — do not expand via open web
             do_search = False
 
         if do_search:
@@ -46,11 +68,11 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
                     continue
                 candidate_urls.append(hit.url)
 
-    # Cap pages
-    candidate_urls = candidate_urls[: max(max_pages, len(direct_urls))]
+    # Cap pages (keep seeded + search URLs)
+    candidate_urls = candidate_urls[: max(max_pages + len(domains) * 2, len(direct_urls))]
 
     pages = (
-        await fetch_pages(candidate_urls, settings, concurrency=2)
+        await fetch_pages(candidate_urls, settings, concurrency=1)
         if candidate_urls
         else []
     )
@@ -61,6 +83,14 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
         if p.status != "ok"
     ]
 
+    used_snippet_fallback = False
+    if not ok_pages and search_hits:
+        ok_pages = _snippet_pages(search_hits)
+        used_snippet_fallback = bool(ok_pages)
+        meta_note = "Used search snippets because page fetches failed."
+    else:
+        meta_note = None
+
     sources = retrieve(req.query, ok_pages, top_k=min(8, max(4, max_pages)))
 
     answer: str | None = None
@@ -69,11 +99,13 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
         "searched": bool(search_hits),
         "search_hit_count": len(search_hits),
         "pages_fetched": len(pages),
-        "pages_ok": len(ok_pages),
+        "pages_ok": len([p for p in pages if p.status == "ok" and p.content]),
+        "snippet_fallback": used_snippet_fallback,
         "page_errors": failed_pages[:10],
         "domains": domains,
         "direct_urls": direct_urls,
         "model": settings.openrouter_model if req.synthesize else None,
+        "note": meta_note,
     }
 
     if req.synthesize:
@@ -81,7 +113,7 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
             detail = ""
             if failed_pages:
                 first = failed_pages[0]
-                detail = f" First failure: {first.get('status')} {first.get('error')}"
+                detail = f" First failure: {first.get('status')} — {first.get('error')}"
             answer = (
                 "No usable content was retrieved from the allowed sites. "
                 "Try broader domains, different URLs, or enable web search."
@@ -108,7 +140,6 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
                 meta["synthesize_error"] = str(exc)
                 answer = None
 
-            # Build citation list from retrieved sources
             seen_urls: set[str] = set()
             for idx, s in enumerate(sources, start=1):
                 if s.url in seen_urls:
