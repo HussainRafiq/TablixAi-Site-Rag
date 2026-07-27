@@ -63,3 +63,13 @@ async def research(
                     "Lower max_results or disable synthesize."
                 ),
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid request values: {exc}",
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=500,
+                detail=f"Research failed: {type(exc).__name__}: {exc}",
+            ) from exc

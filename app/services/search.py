@@ -19,22 +19,14 @@ class SearchHit:
 
 
 def _normalize_host(value: str) -> str:
-    value = value.strip().lower()
+    value = value.strip().lower().strip("'\"[] ")
+    if not value:
+        return ""
     if "://" not in value:
         value = f"https://{value}"
     parsed = urlparse(value)
-    host = parsed.netloc or parsed.path.split("/")[0]
+    host = (parsed.netloc or parsed.path.split("/")[0]).strip("'\"[] ")
     return host.removeprefix("www.")
-
-
-def is_url(value: str) -> bool:
-    value = value.strip()
-    if value.startswith(("http://", "https://")):
-        return True
-    # bare path-like domain with path
-    if "/" in value and "." in value.split("/")[0]:
-        return True
-    return False
 
 
 def split_sites(sites: list[str]) -> tuple[list[str], list[str]]:
@@ -42,7 +34,7 @@ def split_sites(sites: list[str]) -> tuple[list[str], list[str]]:
     urls: list[str] = []
     domains: list[str] = []
     for raw in sites:
-        s = raw.strip()
+        s = str(raw).strip().strip("'\"").strip("[] ").strip("'\"")
         if not s:
             continue
         if s.startswith(("http://", "https://")):
@@ -54,10 +46,13 @@ def split_sites(sites: list[str]) -> tuple[list[str], list[str]]:
             continue
         # plain domain
         if "." in s and " " not in s:
-            domains.append(_normalize_host(s))
+            host = _normalize_host(s)
+            if host:
+                domains.append(host)
             continue
-        # fallback: treat as domain hint
-        domains.append(_normalize_host(s))
+        host = _normalize_host(s)
+        if host:
+            domains.append(host)
     return urls, domains
 
 

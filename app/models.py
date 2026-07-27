@@ -50,11 +50,44 @@ class ResearchRequest(BaseModel):
     @field_validator("sites", mode="before")
     @classmethod
     def coerce_sites(cls, v: Any) -> Any:
+        import json
+        import re
+
         if v is None or v == "":
             return []
+
         if isinstance(v, str):
-            # n8n sometimes sends comma-separated domains
-            return [p.strip() for p in v.split(",") if p.strip()]
+            s = v.strip()
+            # n8n often sends a JSON array as a string: '["tablixai.com"]'
+            if (s.startswith("[") and s.endswith("]")) or (
+                s.startswith("{") and s.endswith("}")
+            ):
+                try:
+                    parsed = json.loads(s)
+                    if isinstance(parsed, list):
+                        v = parsed
+                    elif isinstance(parsed, dict):
+                        v = list(parsed.values())
+                    else:
+                        v = [s]
+                except json.JSONDecodeError:
+                    # strip brackets/quotes manually
+                    inner = s.strip("[]")
+                    v = [p.strip().strip("'\"") for p in inner.split(",") if p.strip()]
+            else:
+                v = [p.strip().strip("'\"") for p in s.split(",") if p.strip()]
+
+        if isinstance(v, list):
+            cleaned: list[str] = []
+            for item in v:
+                if item is None:
+                    continue
+                text = str(item).strip().strip("'\"")
+                text = re.sub(r"^\[+|\]+$", "", text).strip().strip("'\"")
+                if text:
+                    cleaned.append(text)
+            return cleaned
+
         return v
 
 
