@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from app.config import Settings
@@ -31,7 +32,7 @@ def _snippet_pages(hits: list[SearchHit]) -> list[PageDocument]:
             PageDocument(
                 url=hit.url,
                 title=hit.title or hit.url,
-                content=text,
+                content=text[:2000],
                 status="ok",
                 error="snippet_fallback",
             )
@@ -44,11 +45,9 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
     max_pages = min(req.max_results, settings.max_pages)
 
     candidate_urls: list[str] = list(direct_urls)
-    # Seed domain roots so site-restricted research has a reliable page even if
-    # search result URLs fail (Cloudflare, timeouts, etc.).
-    for domain in domains:
+    # One root seed per domain (avoid www + apex doubling memory/time).
+    for domain in domains[:3]:
         candidate_urls.append(f"https://{domain}/")
-        candidate_urls.append(f"https://www.{domain}/")
 
     search_hits: list[SearchHit] = []
 
@@ -58,7 +57,9 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
             do_search = False
 
         if do_search:
-            search_hits = search_web(
+            # DDGS is sync/blocking — never run on the event loop.
+            search_hits = await asyncio.to_thread(
+                search_web,
                 req.query,
                 max_results=max_pages,
                 domains=domains,
@@ -68,8 +69,8 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
                     continue
                 candidate_urls.append(hit.url)
 
-    # Cap pages (keep seeded + search URLs)
-    candidate_urls = candidate_urls[: max(max_pages + len(domains) * 2, len(direct_urls))]
+    # Hard cap pages to protect tiny hosts.
+    candidate_urls = candidate_urls[:max_pages]
 
     pages = (
         await fetch_pages(candidate_urls, settings, concurrency=1)
@@ -77,6 +78,11 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
         else []
     )
     ok_pages = [p for p in pages if p.status == "ok" and p.content]
+    # Drop huge content early
+    for p in ok_pages:
+        if len(p.content) > settings.max_chars_per_page:
+            p.content = p.content[: settings.max_chars_per_page]
+
     failed_pages = [
         {"url": p.url, "status": p.status, "error": p.error}
         for p in pages
@@ -91,7 +97,7 @@ async def run_research(req: ResearchRequest, settings: Settings) -> ResearchResp
     else:
         meta_note = None
 
-    sources = retrieve(req.query, ok_pages, top_k=min(8, max(4, max_pages)))
+    sources = retrieve(req.query, ok_pages, top_k=min(4, max(2, max_pages)))
 
     answer: str | None = None
     citations: list[Citation] = []

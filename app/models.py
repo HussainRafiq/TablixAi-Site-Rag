@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ResearchRequest(BaseModel):
@@ -12,7 +12,7 @@ class ResearchRequest(BaseModel):
             "Examples: ['docs.python.org', 'https://example.com/guide']"
         ),
     )
-    max_results: int = Field(default=6, ge=1, le=20, description="Max pages to retrieve")
+    max_results: int = Field(default=3, ge=1, le=8, description="Max pages to retrieve")
     synthesize: bool = Field(
         default=True,
         description="If true, use OpenRouter to produce a cited answer (requires API key)",
@@ -28,6 +28,34 @@ class ResearchRequest(BaseModel):
             "If false, only fetch the provided URLs."
         ),
     )
+
+    @field_validator("max_results", mode="before")
+    @classmethod
+    def coerce_max_results(cls, v: Any) -> Any:
+        if isinstance(v, str) and v.strip().isdigit():
+            return int(v.strip())
+        return v
+
+    @field_validator("synthesize", "include_raw", "search_web", mode="before")
+    @classmethod
+    def coerce_bool(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"true", "1", "yes", "on"}:
+                return True
+            if s in {"false", "0", "no", "off"}:
+                return False
+        return v
+
+    @field_validator("sites", mode="before")
+    @classmethod
+    def coerce_sites(cls, v: Any) -> Any:
+        if v is None or v == "":
+            return []
+        if isinstance(v, str):
+            # n8n sometimes sends comma-separated domains
+            return [p.strip() for p in v.split(",") if p.strip()]
+        return v
 
 
 class SourceChunk(BaseModel):
@@ -66,3 +94,4 @@ class HealthResponse(BaseModel):
     status: str
     openrouter_configured: bool
     model: str
+    busy: bool = False

@@ -21,7 +21,7 @@ async def chat_completion(
     *,
     messages: list[dict[str, str]],
     temperature: float = 0.2,
-    max_tokens: int = 1800,
+    max_tokens: int | None = None,
 ) -> str:
     if not settings.openrouter_api_key.strip():
         raise OpenRouterError(
@@ -39,11 +39,12 @@ async def chat_completion(
         "model": settings.openrouter_model,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_tokens": max_tokens or settings.openrouter_max_tokens,
     }
 
     url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
-    async with httpx.AsyncClient(timeout=90.0) as client:
+    timeout = httpx.Timeout(settings.openrouter_timeout)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, headers=headers, json=payload)
         if resp.status_code >= 400:
             raise OpenRouterError(
